@@ -1,15 +1,30 @@
 # mcmicro-scanpy
-An MCMICRO module implementation of scanpy for clustering cells using the Leiden algorithm. test push
+An MCMICRO module implementation of scanpy for clustering cells using the Leiden algorithm.
 
 Example usage:
 ```
 docker run --rm -v "$PWD":/data labsyspharm/mc-scanpy:1.0.1 python3 /app/cluster.py -i /data/unmicst-exemplar-001.csv -o /data/ -c
 ```
 
+## TODO:
+1. Change the output to a scanpy h5ad object instead of cell lists
+2. Include method for transform using CLR instead of log
+3. Publish to dockerhub
+
+We probably need to test this just by the image first. so we can get a whole run through of the other methods first.
+
+### modification to cluster.py
+
+1. ~~Add methodology for writing h5ad~~
+2. ~~Add methodology for custom clustering~~
+3. ~~When it makes h5ad files, xy coordinates need to be added in.~~
+~~follow example in immunai-product/research/dgic/01_parsed_data.ipynb~~
+ 
 ## Output Files
 - `cells.csv` contains the cluster assignment for each cell
 - `clusters.csv` contains each clusters' mean values for every feature 
 (if the max feature value is >1000 then the values will be log transformed for clustering and remain transformed in this output file)
+- `scanpy.h5ad` contains the scanpy anndata objects for single-cell analysis
 
 ## Paramenter Reference
 ```
@@ -32,4 +47,11 @@ optional arguments:
                         A yaml config file that states whether the input data should be log/logicle transformed.
   --force-transform     Log transform the input data. If omitted, and --no-transform is omitted, log transform is only performed if the max value in the input data is >1000.
   --no-transform        Do not perform Log transformation on the input data. If omitted, and --force-transform is omitted, log transform is only performed if the max value in the input data is >1000.
+```
+
+## Build
+
+Build from this repo as you would any other docker git repo
+```
+docker build -t mitpenguin/mc-scanpy:1.2 .
 ```

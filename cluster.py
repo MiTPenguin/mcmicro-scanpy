@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import anndata as ad
+import scipy
 
 '''
 Parse arguments.
@@ -68,6 +69,7 @@ def clean(input_file):
     # constants
 
     # a default list of features to exclude from clustering
+    # we do want to also save these data separately as well. modify below to save 
     FEATURES_TO_REMOVE = ['X_centroid', 'Y_centroid', # morphological features
                         'column_centroid', 'row_centroid', 
                         'Area', 'MajorAxisLength', 
@@ -86,6 +88,7 @@ def clean(input_file):
             markers.insert(0, CELL_ID)
         elif markers.index(CELL_ID) != 0: # if cell ID column is included but not first, move it to the front
             markers.insert(0, markers.pop(markers.index(CELL_ID)))
+        meta_data = data.drop(columns = markers, axis = 1).copy() # keep meta data separate
         data = data[markers]
     else:
         # find any columns in the input csv that should be excluded from clustering be default
@@ -96,11 +99,15 @@ def clean(input_file):
             r = re.compile(feature)
             col_to_remove.extend(list(filter(r.match, cols)))
         
+        # save meta data that we need.
+        meta_data = data[col_to_remove].copy()
         # drop all columns that should be excluded
         data = data.drop(columns=col_to_remove, axis=1)
 
     # save cleaned data to csv
     data.to_csv(f'{output}/{clean_data_file}', index=False)
+    # save meta data separately
+    meta_data.to_csv(f'{output}/{meta_data_file}', index=False)
 
 
 '''
@@ -132,6 +139,11 @@ def writeClusters(adata):
 
     clusters.to_csv(f'{output}/{clusters_file}')
 
+'''
+Write adata into h5ad
+'''
+def writeH5ad(adata):
+    adata.write_h5ad(f'{output}/{h5ad_file}')
 
 '''
 Get max value in dataframe.
@@ -139,7 +151,28 @@ Get max value in dataframe.
 def getMax(df):
     return max([n for n in df.max(axis = 0)])
 
+'''
+normalization function taken from xyz_utils
+'''
+def clr_normalize_each_cell(adata, inplace=True):
+    """
+    Normalize count vector for each cell, i.e. for each row of .X
+    """
 
+    def seurat_clr(x):
+        # TODO: support sparseness
+        s = np.sum(np.log1p(x[x > 0]))
+        exp = np.exp(s / len(x))
+        return np.log1p(x / exp)
+
+    if not inplace:
+        adata = adata.copy()
+
+    # apply to dense or sparse matrix, along axis. returns dense matrix
+    adata.X = np.apply_along_axis(
+        seurat_clr, 0, (adata.X.A if scipy.sparse.issparse(adata.X) else adata.X) # seurat tutorial suggested normalization across cells, so I think the axis should be 0 instead of 1
+    )
+    return adata
 
 '''
 Cluster data using the Leiden algorithm via scanpy
@@ -173,6 +206,58 @@ def leidenCluster():
 
     # write cluster mean feature expression to 'CLUSTERS_FILE'
     writeClusters(adata)
+
+
+
+'''
+Cluster data with our preferred way of clustering.
+'''
+
+def louvainCluster():
+
+    sc.settings.verbosity = 3 # print out information
+    adata_init = sc.read(f'{output}/{clean_data_file}', cache=True) # load in clean data
+    meta_data = pd.read_csv(f'{output}/{meta_data_file}') # read in meta data
+
+    # make coordinates ready for addition later
+    coordinates = meta_data.loc[:,['X_centroid','Y_centroid']]
+    coordinates.columns = ['X','Y']
+
+    # move CellID info into .obs
+    # this assumes that 'CELL_ID' is the first column in the csv
+    adata_init.obs[CELL_ID] = adata_init.X[:,0]
+    adata = ad.AnnData(np.delete(adata_init.X, 0, 1), obs=adata_init.obs, var=adata_init.var.drop([CELL_ID]))
+
+    # add meta data and spatial coordinates back to adata
+    adata.obs = meta_data
+    adata.obsm = {"spatial": coordinates.loc[:,['X','Y']].to_numpy()}
+
+    # save untransformed data in the backup slots
+    adata.raw = adata # store raw data to use for scaling for multiple different methods.
+    adata.layers['raw'] = adata.X
+
+    #transform the data. We're just going to assume tranformation is true
+    adata = clr_normalize_each_cell(adata)
+    adata.layers['clr'] = adata.X
+    writeConfig(True)
+
+    # compute PCA
+    sc.pp.pca(adata)
+
+    # compute neighbors and cluster
+    # using the first 15 components since we have generally have more markers
+    sc.pp.neighbors(adata, n_neighbors=args.neighbors, n_pcs = 15, use_rep  = 'X_pca') 
+    sc.tl.umap(adata) # compute UMAP
+    sc.tl.louvain(adata, resolution=0.6) # run louvain clustering. default resolution is 1.0
+
+    # write cell/cluster information to 'CELLS_FILE'
+    writeCells(adata)
+
+    # write cluster mean feature expression to 'CLUSTERS_FILE'
+    writeClusters(adata)
+
+    # write the h5ad file
+    writeH5ad(adata)
 
 
 '''
@@ -241,11 +326,17 @@ if __name__ == '__main__':
     # output file names
     data_prefix = getDataName(args.input) # get the name of the input data file to add as a prefix to the output file names
     clean_data_file = f'{data_prefix}-clean.csv' # name of output cleaned data CSV file
+    meta_data_file = f'{data_prefix}-meta_data.csv' # name of output meta data csv file
     clusters_file = f'{data_prefix}-clusters.csv' # name of output CSV file that contains the mean expression of each feaute, for each cluster
     cells_file = f'{data_prefix}-cells.csv' # name of output CSV file that contains each cell ID and it's cluster assignation
-    
+    h5ad_file = f'{data_prefix}-scanpy.h5ad'
+
     # clean input data file
     clean(args.input)
 
     # cluster using scanpy implementation of Leiden algorithm
-    leidenCluster()
+    # leidenCluster()
+
+    # cluster using Louvain, then output the h5ad file
+    louvainCluster()
+
