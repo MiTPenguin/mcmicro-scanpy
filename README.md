@@ -7,11 +7,15 @@ docker run --rm -v "$PWD":/data labsyspharm/mc-scanpy:1.0.1 python3 /app/cluster
 ```
 
 ## TODO:
-1. Change the output to a scanpy h5ad object instead of cell lists
-2. Include method for transform using CLR instead of log
-3. Publish to dockerhub
+1. ~~Change the output to a scanpy h5ad object instead of cell lists~~
+2. ~~Include method for transform using CLR instead of log~~
+3. ~~Publish to dockerhub (mitpenguin/mc_scanpy:latest)~~
+4. Fix writecell and writecluster to allow different cluster inputs
+5. Specify version of scanpy and pandas package via requirements txt
+6. Add sample tagging into the meta data for easy h5ad combination
+7. Make graphical output for quick QC (umap cluster, etc.)
 
-We probably need to test this just by the image first. so we can get a whole run through of the other methods first.
+~~We probably need to test this just by the image first. so we can get a whole run through of the other methods first.~~
 
 ### modification to cluster.py
 
@@ -49,9 +53,37 @@ optional arguments:
   --no-transform        Do not perform Log transformation on the input data. If omitted, and --force-transform is omitted, log transform is only performed if the max value in the input data is >1000.
 ```
 
+## Default input from mcmicro
+
+```
+  downstream:
+    -
+      name: scanpy
+      container: labsyspharm/mc-scanpy
+      version: 1.0.1
+      cmd: python3 /app/cluster.py -c
+      input: -i
+```
+
+Taken from the `mcmicro/config` repo. output is defaulted to just the current directory of the script execution if
+nothing is provided. so far it doesn't seem ilke by default the command provides a lot of alternative output.
+
+To use the customized version of this module, add the following to `params.yml`
+
+```
+downstream:
+    -
+      name: scanpy
+      container: mitpenguin/mc-scanpy
+      version: 1.2
+```
+
+change the `stop-at` value to `downstream` in the yml file as well.
+
 ## Build
 
 Build from this repo as you would any other docker git repo
+
 ```
 docker build -t mitpenguin/mc-scanpy:1.2 .
 ```

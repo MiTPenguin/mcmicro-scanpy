@@ -225,11 +225,12 @@ def louvainCluster():
 
     # move CellID info into .obs
     # this assumes that 'CELL_ID' is the first column in the csv
+    # I think this way of creating anndata is giving us trouble. 
     adata_init.obs[CELL_ID] = adata_init.X[:,0]
     adata = ad.AnnData(np.delete(adata_init.X, 0, 1), obs=adata_init.obs, var=adata_init.var.drop([CELL_ID]))
 
     # add meta data and spatial coordinates back to adata
-    adata.obs = meta_data
+    adata.obs = pd.concat([adata.obs, meta_data.set_index(adata.obs.index)], axis=1)
     adata.obsm = {"spatial": coordinates.loc[:,['X','Y']].to_numpy()}
 
     # save untransformed data in the backup slots
@@ -251,10 +252,10 @@ def louvainCluster():
     sc.tl.louvain(adata, resolution=0.6) # run louvain clustering. default resolution is 1.0
 
     # write cell/cluster information to 'CELLS_FILE'
-    writeCells(adata)
+    # writeCells(adata)
 
     # write cluster mean feature expression to 'CLUSTERS_FILE'
-    writeClusters(adata)
+    # writeClusters(adata)
 
     # write the h5ad file
     writeH5ad(adata)
