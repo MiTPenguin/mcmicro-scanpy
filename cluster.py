@@ -247,7 +247,13 @@ def louvainCluster():
 
     # compute neighbors and cluster
     # using the first 15 components since we have generally have more markers
-    sc.pp.neighbors(adata, n_neighbors=args.neighbors, n_pcs = 15, use_rep  = 'X_pca') 
+
+    # TODO: this throws an error if we have very low complexity. n_pcs and use_rep need to be made dynamic to detect
+    # output from the last stepq
+    if len(adata.var_names) < 15:
+        sc.pp.neighbors(adata, n_neighbors=args.neighbors) 
+    else:
+        sc.pp.neighbors(adata, n_neighbors=args.neighbors, n_pcs = 15, use_rep  = 'X_pca') 
     sc.tl.umap(adata) # compute UMAP
     sc.tl.louvain(adata, resolution=0.6) # run louvain clustering. default resolution is 1.0
 
