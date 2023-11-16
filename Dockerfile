@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:3.11
 RUN pip3 install pandas
 RUN pip3 install scipy
 #RUN pip3 install leidenalg
